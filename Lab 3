@@ -1,0 +1,53 @@
+import google.generativeai as genai
+import sys
+import json
+import os
+
+
+API_KEY = "AIzaSyAodhd7Sw45ws9BcrCFC406hT2K5oaPh5k"
+
+genai.configure(api_key=API_KEY)
+model = genai.GenerativeModel('gemini-3-flash-preview')
+MEMORY_FILE = "chat_memory.json"
+
+if os.path.exists(MEMORY_FILE):
+    with open(MEMORY_FILE, "r", encoding="utf-8") as f:
+        saved_history = json.load(f)
+    print("Бот пам'ятає минулу розмову.")
+else:
+    saved_history = []
+
+
+chat = model.start_chat(history=saved_history)
+
+print("="*50)
+print("🤖: ?")
+print("="*50 + "\n")
+
+while True:
+    try:
+        user_input = input("😎: ")
+
+        if user_input.lower() in ['вихід', 'exit', 'quit']:
+
+            history_to_save = []
+            for message in chat.history:
+                history_to_save.append({
+                    "role": message.role,
+                    "parts": [message.parts[0].text]
+                })
+
+            with open(MEMORY_FILE, "w", encoding="utf-8") as f:
+                json.dump(history_to_save, f, ensure_ascii=False, indent=4)
+            print("Історію збережено.")
+            sys.exit()
+
+        if not user_input.strip():
+            continue
+
+        response = chat.send_message(user_input)
+        print(f"🤖 : {response.text}\n")
+
+    except Exception as e:
+        print(f"\nСталася помилка: {e}")
+        break
