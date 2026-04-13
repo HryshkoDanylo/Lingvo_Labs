@@ -1,0 +1,140 @@
+import os
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
+import pandas as pd
+import numpy as np
+import json
+from tensorflow.keras import layers, models
+from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+
+train_path = "D:/emnist/emnist-letters-train.csv"
+test_path = "D:/emnist/emnist-letters-test.csv"
+
+train_data = pd.read_csv(train_path, header=None)
+test_data = pd.read_csv(test_path, header=None)
+
+# перше значення цсвшки - власне буква,потім 784 пікселі
+y_train_full = train_data.iloc[:, 0].values - 1
+y_test = test_data.iloc[:, 0].values - 1
+
+# розібрав цвшку на 28 х 28 пікселів, записав матрицею
+x_train_full = train_data.iloc[:, 1:].values.reshape(-1, 28, 28)
+x_test = test_data.iloc[:, 1:].values.reshape(-1, 28, 28)
+
+# зібрав картинки назад
+x_train_full = np.transpose(x_train_full, (0, 2, 1))
+x_test = np.transpose(x_test, (0, 2, 1))
+
+# Нормалізація для розподілу від 0 до 1
+x_train_full = x_train_full / 255.0
+x_test = x_test / 255.0
+
+# кинув 15 відсотків на контроль, ніби норм
+x_train, x_val, y_train, y_val = train_test_split(x_train_full, y_train_full, test_size=0.15, random_state=42)
+
+
+MODEL_FILE = 'emnist_model.keras'
+HISTORY_FILE = 'emnist_history.json'
+
+if os.path.exists(MODEL_FILE) and os.path.exists(HISTORY_FILE):
+    print("Знайдено збережену модель! Завантажую...")
+    model = models.load_model(MODEL_FILE)
+
+    with open(HISTORY_FILE, 'r') as f:
+        history_dict = json.load(f)
+else:
+    print("Збереженої моделі не знайдено. Починаю навчання...")
+    # нейронка
+    model = models.Sequential([
+        layers.Flatten(input_shape=(28, 28)),
+        layers.Dense(128, activation='relu'),
+        layers.Dense(26, activation='softmax')
+    ])
+
+    model.compile(optimizer='adam',
+                  loss='sparse_categorical_crossentropy',
+                  metrics=['accuracy'])
+
+    # Навчання, як показала практика 3 епох достатньо, на 5-6 йде перенавчання
+    history = model.fit(x_train, y_train,
+                        epochs=6,
+                        validation_data=(x_val, y_val))
+
+    print(" Зберігаю модель та історію навчання...")
+    model.save(MODEL_FILE)
+
+
+    history_dict = history.history
+    with open(HISTORY_FILE, 'w') as f:
+        json.dump(history_dict, f
+
+plt.figure(figsize=(12, 5))
+
+# Графік Loss 
+plt.subplot(1, 2, 1)
+plt.plot(history_dict['loss'], label='Навчання (Loss)', color='blue')
+plt.plot(history_dict['val_loss'], label='Контроль (Val Loss)', color='red')
+plt.title('Графік втрат (Loss)')
+plt.xlabel('Епоха')
+plt.ylabel('Втрати')
+plt.legend()
+plt.grid(True)
+
+# Графік Accuracy
+plt.subplot(1, 2, 2)
+plt.plot(history_dict['accuracy'], label='Навчання (Accuracy)', color='blue')
+plt.plot(history_dict['val_accuracy'], label='Контроль (Val Accuracy)', color='red')
+plt.title('Графік точності (Accuracy)')
+plt.xlabel('Епоха')
+plt.ylabel('Точність')
+plt.legend()
+plt.grid(True)
+
+plt.tight_layout()
+plt.show() 
+
+# Оцінка
+test_loss, test_acc = model.evaluate(x_test,  y_test, verbose=2)
+print(f'\nТочність розпізнавання на тестових даних: {test_acc * 100:.2f}%')
+
+# Візуалізація результатів
+predictions = model.predict(x_test)
+plt.figure(figsize=(15, 8))
+
+random_indices = np.random.choice(len(x_test), 20, replace=False)
+
+for i, idx in enumerate(random_indices):
+    plt.subplot(4, 5, i + 1)
+
+    # predictions[idx] містить 26 чисел імовірнсотей кожної букви, взято із вихідного шару softmax
+    img_probs = predictions[idx]
+
+    # np.argsort сортує ці ймовірності за зростанням і повертає їх індекси. Показую лише топ 3, інші відкидаю
+    top_3_indices = np.argsort(img_probs)[-3:][::-1]
+    top_3_probs = img_probs[top_3_indices] * 100
+
+    # індекси з буквами, по ASCII + 65
+    top_3_letters = [chr(idx_class + 65) for idx_class in top_3_indices]
+
+    # Справжня літера
+    true_class = y_test[idx]
+    true_letter = chr(true_class + 65)
+
+    plt.imshow(x_test[idx], cmap='binary')
+
+    # Заголовок, софтмакс
+    title_text = f"Справжня: {true_letter}\n"
+    title_text += "-"*15 + "\n"
+    title_text += f"1. {top_3_letters[0]} ({top_3_probs[0]:.1f}%)\n"
+    title_text += f"2. {top_3_letters[1]} ({top_3_probs[1]:.1f}%)\n"
+    title_text += f"3. {top_3_letters[2]} ({top_3_probs[2]:.1f}%)"
+
+    # світлофор
+    title_color = 'green' if top_3_indices[0] == true_class else 'red'
+
+    plt.title(title_text, color=title_color, fontsize=10, loc='left')
+    plt.axis('off')
+
+plt.tight_layout()
+plt.show()
