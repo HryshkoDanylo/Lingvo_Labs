@@ -1,0 +1,48 @@
+import os
+import time
+from gtts import gTTS
+
+try:
+    import pygame
+    USE_PYGAME = True
+    pygame.mixer.init()
+except ImportError:
+    USE_PYGAME = False
+
+print("═"*50)
+print("Все працює")
+print("═"*50 + "\n")
+
+while True:
+    text = input("Текст ")
+
+    if text.lower() == 'q':
+        break
+
+    if not text.strip():
+        continue
+
+    filename = f"voice_{int(time.time())}.mp3"
+
+    try:
+        print("Думаю...")
+
+        tts = gTTS(text=text, lang='uk')
+        tts.save(filename)
+        print(f"Файл збережено: {filename}")
+
+        if USE_PYGAME:
+            pygame.mixer.music.load(filename)
+            pygame.mixer.music.play()
+
+            while pygame.mixer.music.get_busy():
+                time.sleep(0.1)
+
+            pygame.mixer.music.unload()
+        else:
+            os.startfile(filename)
+
+        print("-" * 50)
+
+    except Exception as e:
+        print(f"Ерор такий що дуже прям страшно, десь шось зламалося: {e}")
